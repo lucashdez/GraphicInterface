@@ -12,21 +12,88 @@ macro_rules! zero {
 
 extern "system"
 fn window_proc(window: isize,
-               msg: u32,
+               message: u32,
                wparam: usize,
                lparam: isize,) -> isize {
   let mut result = 0;
+  match message {
+    WM_SIZE => {
+      unsafe { OutputDebugStringW(w!("WM_SIZE")) };
+    },
 
+    WM_DESTROY => {
+      unsafe { OutputDebugStringW(w!("WM_DESTROY")) };
+    },
+
+    WM_CLOSE => {
+      unsafe { OutputDebugStringW(w!("WM_CLOSE")) };
+    },
+
+    WM_ACTIVATEAPP => {
+      unsafe { OutputDebugStringW(w!("WM_ACTIVATEAPP")) };
+    },
+
+    WM_PAINT => {
+    },
+
+    _ => {
+      result = unsafe {DefWindowProcW(window, message, wparam, lparam)};
+    }
+  }
   return result;
 }
 
 
 
 fn main() {
-  let h_instance: isize = unsafe { GetModuleHandleW(std::ptr::null()) };
+  let instance: isize = unsafe { GetModuleHandleW(std::ptr::null()) };
   let mut window_class:WNDCLASSW = zero!();
   window_class.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
   window_class.lpfnWndProc = Some(window_proc);
-  window_class.hInstance = h_instance;
+  window_class.hInstance = instance;
   window_class.lpszClassName = w!("GraphicsInterfaceWindowClass");
+
+  let register_result = unsafe { RegisterClassW(&window_class) };
+  if register_result > 0 {
+    let window_handle = unsafe { 
+      CreateWindowExW(
+        0, 
+        window_class.lpszClassName, 
+        w!("Graphics Interface"), 
+        WS_OVERLAPPEDWINDOW|WS_VISIBLE, 
+        CW_USEDEFAULT, 
+        CW_USEDEFAULT, 
+        CW_USEDEFAULT, 
+        CW_USEDEFAULT, 
+        0, 
+        0, 
+        instance, 
+        std::ptr::null()) };
+    if window_handle > 0 {
+      let mut message: MSG = zero!();
+      loop {
+        let message_result = unsafe { GetMessageW(&mut message, 0, 0, 0) };
+        if message_result == -1 {
+          panic!("NO MESSAGES FOUND AAAAAAAAA");
+        } else if message_result == 0 {
+          panic!("SOMETHING");
+        } else {
+          unsafe {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+          }
+          
+        }
+      }
+      
+
+    } else {
+      // TODO: window handle error logging
+    } 
+
+
+  } else {
+    // TODO: Handle register_result error;
+  }
+
 }
