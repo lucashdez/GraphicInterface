@@ -34,6 +34,18 @@ fn window_proc(window: isize,
     },
 
     WM_PAINT => {
+      let mut paint:PAINTSTRUCT = zero!();
+      let device_context:isize = unsafe { BeginPaint(window, &mut paint) };
+      let x = paint.rcPaint.left;
+      let y = paint.rcPaint.top;
+      let height = paint.rcPaint.bottom - paint.rcPaint.top;
+      let width = paint.rcPaint.right - paint.rcPaint.left;
+      let mut operation;
+
+      unsafe { PatBlt(device_context, x, y, width, height, operation); }
+
+      unsafe { EndPaint(window, &paint) };
+
     },
 
     _ => {
@@ -82,7 +94,6 @@ fn main() {
             TranslateMessage(&message);
             DispatchMessageW(&message);
           }
-          
         }
       }
       
