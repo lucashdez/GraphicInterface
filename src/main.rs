@@ -8,56 +8,83 @@ use windows_sys::core::*;
 macro_rules! zero {
     () => {
         unsafe {core::mem::zeroed()}
-    };
+    }
 }
 
-
-fn win32_resize_dib_section(width: i32, height: i32) {
+fn win32_resize_dib_section(
+  device_context: &mut isize,
+  bitmap_handle: &mut isize,
+  bitmap_memory: &mut *mut std::os::raw::c_void,
+  bitmap_info: &mut BITMAPINFO, 
+  width: i32, height: i32
+) -> () {
+  
   // TODO: Finalizar los bitmaps para los colores.
-  let bitmap_info: BITMAPINFO = zero!();
+  // TODO : Hacerlo safe
+  unsafe {
+    if *bitmap_handle > 0  {
+      DeleteObject(*bitmap_handle);
+    }
+  }
   bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
   bitmap_info.bmiHeader.biWidth = width;
   bitmap_info.bmiHeader.biHeight = height;
-  let bitmap_memory: *mut std::os::raw::c_void;
-  let bitmap_handle: HBITMAP = unsafe { CreateDIBSection(
-    device_context, &bitmap_info, 
-    DIB_RGB_COLORS, 
-    &mut bitmap_memory, 
-    0, 0)
+  bitmap_info.bmiHeader.biPlanes = 1;
+  bitmap_info.bmiHeader.biBitCount = 32;
+  bitmap_info.bmiHeader.biCompression = BI_RGB;
+  // TODO : Bulletproof this. Free after if we dont have a handle fast enough.
+  unsafe {
+    *device_context = CreateCompatibleDC(0);
+    *bitmap_handle = CreateDIBSection(
+      *device_context, bitmap_info, 
+      DIB_RGB_COLORS, 
+      bitmap_memory, 
+      0, 0)
   };
 }
 
-fn win32_update_window(device_context: isize, x: i32, y: i32, width: i32, height: i32) {
+// {{{WIN32_UPDATE_WINDOW
+fn win32_update_window(
+  bitmap_memory: &mut *mut std::os::raw::c_void,
+  bitmap_info: &mut BITMAPINFO,
+  device_context: isize, 
+  x: i32, 
+  y: i32, 
+  width: i32, 
+  height: i32
+) -> () {
   unsafe { StretchDIBits(
     device_context, 
-    x, 
-    y, 
-    width, 
-    height, 
-    x, 
-    y, 
-    width, 
-    height, 
-    lpbits, 
-    lpbmi, 
+    x, y, width, height, 
+    x, y, width, height, 
+    *bitmap_memory, 
+    bitmap_info, 
     DIB_RGB_COLORS, 
     SRCCOPY);
   }
 }
+// }}}
 
+//{{{ WIN32_PROC: MSG HANDLER
 extern "system"
-fn win32_window_proc(window: isize,
-               message: u32,
-               wparam: usize,
-               lparam: isize,) -> isize {
+fn win32_window_proc(
+  window: isize,
+  message: u32,
+  wparam: usize,
+  lparam: isize,
+) -> isize {
   let mut result = 0;
+  let mut device_context:isize = 0;
   match message {
     WM_SIZE => {
-      let mut client_rect:RECT = zero!();
+      let mut bitmap_info: BITMAPINFO = zero!();
+      let mut client_rect: RECT = zero!();
+      let mut bitmap_handle: isize = 0;
+      let mut bitmap_memory: *mut std::os::raw::c_void = zero!();
       unsafe { GetClientRect(window, &mut client_rect) };
       let width: i32 = client_rect.right - client_rect.left;
       let height: i32 = client_rect.bottom - client_rect.top;
-      win32_resize_dib_section(width, height);
+      win32_resize_dib_section(&mut device_context, &mut bitmap_handle, &mut bitmap_memory, &mut bitmap_info, width, height);
       unsafe { OutputDebugStringA(s!("WM_SIZE")) };
     },
 
@@ -78,7 +105,7 @@ fn win32_window_proc(window: isize,
 
     WM_PAINT => {
       let mut paint:PAINTSTRUCT = zero!();
-      let device_context:isize = unsafe { BeginPaint(window, &mut paint) };
+      device_context = unsafe { BeginPaint(window, &mut paint) };
       let x = paint.rcPaint.left;
       let y = paint.rcPaint.top;
       let height = paint.rcPaint.bottom - paint.rcPaint.top;
@@ -95,7 +122,7 @@ fn win32_window_proc(window: isize,
   }
   return result;
 }
-
+//}}}
 
 
 fn main() {
@@ -108,7 +135,7 @@ fn main() {
 
   let register_result = unsafe { RegisterClassA(&window_class) };
   if register_result > 0 {
-    let window_handle = unsafe { 
+    let window_handle: isize = unsafe { 
       CreateWindowExA(
         0, 
         window_class.lpszClassName, 
@@ -124,12 +151,13 @@ fn main() {
         std::ptr::null()) };
     if window_handle > 0 {
       let mut message: MSG = zero!();
+      
       loop {
         let message_result = unsafe { GetMessageA(&mut message, 0, 0, 0) };
         if message_result == -1 {
           panic!("NO MESSAGES FOUND AAAAAAAAA");
         } else if message_result == 0 {
-          unsafe { OutputDebugStringA(s!("Quiting window")) };
+          dbg!(message_result);
           break;
         } else {
           unsafe {
