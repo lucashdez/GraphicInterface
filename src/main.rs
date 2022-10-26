@@ -12,7 +12,7 @@ macro_rules! zero {
 }
 
 fn win32_resize_dib_section(
-  device_context: &mut isize,
+  bitmap_device_context: &mut isize,
   bitmap_handle: &mut isize,
   bitmap_memory: &mut *mut std::os::raw::c_void,
   bitmap_info: &mut BITMAPINFO, 
@@ -25,6 +25,10 @@ fn win32_resize_dib_section(
     if *bitmap_handle > 0  {
       DeleteObject(*bitmap_handle);
     }
+
+    if *bitmap_device_context != 0 {
+      *bitmap_device_context = CreateCompatibleDC(0);
+    }
   }
   bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
   bitmap_info.bmiHeader.biWidth = width;
@@ -32,11 +36,9 @@ fn win32_resize_dib_section(
   bitmap_info.bmiHeader.biPlanes = 1;
   bitmap_info.bmiHeader.biBitCount = 32;
   bitmap_info.bmiHeader.biCompression = BI_RGB;
-  // TODO : Bulletproof this. Free after if we dont have a handle fast enough.
   unsafe {
-    *device_context = CreateCompatibleDC(0);
     *bitmap_handle = CreateDIBSection(
-      *device_context, bitmap_info, 
+      *bitmap_device_context, bitmap_info, 
       DIB_RGB_COLORS, 
       bitmap_memory, 
       0, 0)
@@ -74,7 +76,7 @@ fn win32_window_proc(
   lparam: isize,
 ) -> isize {
   let mut result = 0;
-  let mut device_context:isize = 0;
+  let mut bitmap_device_context:isize = 0;
   match message {
     WM_SIZE => {
       let mut bitmap_info: BITMAPINFO = zero!();
@@ -84,7 +86,7 @@ fn win32_window_proc(
       unsafe { GetClientRect(window, &mut client_rect) };
       let width: i32 = client_rect.right - client_rect.left;
       let height: i32 = client_rect.bottom - client_rect.top;
-      win32_resize_dib_section(&mut device_context, &mut bitmap_handle, &mut bitmap_memory, &mut bitmap_info, width, height);
+      win32_resize_dib_section(&mut bitmap_device_context, &mut bitmap_handle, &mut bitmap_memory, &mut bitmap_info, width, height);
       unsafe { OutputDebugStringA(s!("WM_SIZE")) };
     },
 
@@ -105,13 +107,13 @@ fn win32_window_proc(
 
     WM_PAINT => {
       let mut paint:PAINTSTRUCT = zero!();
-      device_context = unsafe { BeginPaint(window, &mut paint) };
+      let paint_device_context = unsafe { BeginPaint(window, &mut paint) };
       let x = paint.rcPaint.left;
       let y = paint.rcPaint.top;
       let height = paint.rcPaint.bottom - paint.rcPaint.top;
       let width = paint.rcPaint.right - paint.rcPaint.left;
       let operation: u32 = WHITENESS;
-      unsafe { PatBlt(device_context, x, y, width, height, operation); }
+      unsafe { PatBlt(paint_device_context, x, y, width, height, operation); }
       unsafe { EndPaint(window, &paint) };
 
     },
