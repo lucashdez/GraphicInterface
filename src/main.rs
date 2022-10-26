@@ -3,6 +3,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::*;
 use windows_sys::Win32::System::LibraryLoader::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 use windows_sys::Win32::Foundation::*;
+use windows_sys::Win32::System::Memory::*;
 use windows_sys::core::*;
 
 macro_rules! zero {
@@ -12,8 +13,6 @@ macro_rules! zero {
 }
 
 fn win32_resize_dib_section(
-  bitmap_device_context: &mut isize,
-  bitmap_handle: &mut isize,
   bitmap_memory: &mut *mut std::os::raw::c_void,
   bitmap_info: &mut BITMAPINFO, 
   width: i32, height: i32
@@ -21,28 +20,24 @@ fn win32_resize_dib_section(
   
   // TODO: Finalizar los bitmaps para los colores.
   // TODO : Hacerlo safe
-  unsafe {
-    if *bitmap_handle > 0  {
-      DeleteObject(*bitmap_handle);
-    }
-
-    if *bitmap_device_context != 0 {
-      *bitmap_device_context = CreateCompatibleDC(0);
-    }
-  }
   bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
   bitmap_info.bmiHeader.biWidth = width;
   bitmap_info.bmiHeader.biHeight = height;
   bitmap_info.bmiHeader.biPlanes = 1;
   bitmap_info.bmiHeader.biBitCount = 32;
   bitmap_info.bmiHeader.biCompression = BI_RGB;
-  unsafe {
-    *bitmap_handle = CreateDIBSection(
-      *bitmap_device_context, bitmap_info, 
-      DIB_RGB_COLORS, 
-      bitmap_memory, 
-      0, 0)
+  const BYTES_PER_PIXEL: i32 = 4;
+  let bitmap_memory_size: usize = ((width * height) * BYTES_PER_PIXEL) as usize;
+  dbg!(bitmap_memory_size);
+  unsafe { 
+      *bitmap_memory = VirtualAlloc(
+      *bitmap_memory, 
+      bitmap_memory_size, 
+      MEM_COMMIT, 
+      PAGE_READWRITE
+    )
   };
+
 }
 
 // {{{WIN32_UPDATE_WINDOW
@@ -86,7 +81,7 @@ fn win32_window_proc(
       unsafe { GetClientRect(window, &mut client_rect) };
       let width: i32 = client_rect.right - client_rect.left;
       let height: i32 = client_rect.bottom - client_rect.top;
-      win32_resize_dib_section(&mut bitmap_device_context, &mut bitmap_handle, &mut bitmap_memory, &mut bitmap_info, width, height);
+      win32_resize_dib_section(&mut bitmap_memory, &mut bitmap_info, width, height);
       unsafe { OutputDebugStringA(s!("WM_SIZE")) };
     },
 
