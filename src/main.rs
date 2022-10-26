@@ -18,8 +18,9 @@ fn win32_resize_dib_section(
   width: i32, height: i32
 ) -> () {
   
-  // TODO: Finalizar los bitmaps para los colores.
-  // TODO : Hacerlo safe
+  if !bitmap_memory.is_null() {
+    unsafe { VirtualFree(*bitmap_memory, 0, MEM_RELEASE) };
+  }
   bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
   bitmap_info.bmiHeader.biWidth = width;
   bitmap_info.bmiHeader.biHeight = height;
