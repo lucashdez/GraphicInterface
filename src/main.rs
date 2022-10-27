@@ -12,23 +12,23 @@ macro_rules! zero {
     }
 }
 
+//{{{ WIN32_RESIZE_DIB_SECTION
 fn win32_resize_dib_section(
   bitmap_memory: &mut *mut std::os::raw::c_void,
   bitmap_info: &mut BITMAPINFO, 
-  width: i32, height: i32
+  bitmap_width: i32, bitmap_height: i32
 ) -> () {
-  
   if !bitmap_memory.is_null() {
     unsafe { VirtualFree(*bitmap_memory, 0, MEM_RELEASE) };
   }
   bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
-  bitmap_info.bmiHeader.biWidth = width;
-  bitmap_info.bmiHeader.biHeight = height;
+  bitmap_info.bmiHeader.biWidth = bitmap_width;
+  bitmap_info.bmiHeader.biHeight = -bitmap_height;
   bitmap_info.bmiHeader.biPlanes = 1;
   bitmap_info.bmiHeader.biBitCount = 32;
   bitmap_info.bmiHeader.biCompression = BI_RGB;
   const BYTES_PER_PIXEL: i32 = 4;
-  let bitmap_memory_size: usize = ((width * height) * BYTES_PER_PIXEL) as usize;
+  let bitmap_memory_size: usize = ((bitmap_width * bitmap_height) * BYTES_PER_PIXEL) as usize;
   dbg!(bitmap_memory_size);
   unsafe { 
       *bitmap_memory = VirtualAlloc(
@@ -38,23 +38,45 @@ fn win32_resize_dib_section(
       PAGE_READWRITE
     )
   };
+  let pitch = bitmap_width*BYTES_PER_PIXEL;
+  let mut row: *mut u8 = *bitmap_memory as *mut u8 ;
+  for y in 0..bitmap_height {
+    let mut pixel: *mut u8 = row as *mut u8;
+    for x in 0..bitmap_width {
+      unsafe { std::ptr::write_volatile(pixel, 255); }
+      pixel = unsafe { pixel.offset(1) };
+      unsafe { std::ptr::write(pixel, 255) }
+      pixel = unsafe { pixel.offset(1) };
+      unsafe { *pixel = 0; }
+      pixel = unsafe { pixel.offset(1) };
+      unsafe { *pixel = 0; }
+      pixel = unsafe { pixel.offset(1) };
+    }
+    row = unsafe { row.offset(pitch as isize) };
+  }
 
 }
+//}}}
 
 // {{{WIN32_UPDATE_WINDOW
 fn win32_update_window(
   bitmap_memory: &mut *mut std::os::raw::c_void,
   bitmap_info: &mut BITMAPINFO,
   device_context: isize, 
+  window_rect: &RECT,
   x: i32, 
   y: i32, 
   width: i32, 
   height: i32
 ) -> () {
+  let bitmap_width = width;
+  let bitmap_height = height;
+  let window_width = window_rect.right - window_rect.left;
+  let window_height = window_rect.top - window_rect.bottom;
   unsafe { StretchDIBits(
     device_context, 
-    x, y, width, height, 
-    x, y, width, height, 
+    0, 0, bitmap_width, bitmap_height,
+    0, 0, window_width, window_height,
     *bitmap_memory, 
     bitmap_info, 
     DIB_RGB_COLORS, 
@@ -72,13 +94,11 @@ fn win32_window_proc(
   lparam: isize,
 ) -> isize {
   let mut result = 0;
-  let mut bitmap_device_context:isize = 0;
+  let mut bitmap_info: BITMAPINFO = zero!();
+  let mut bitmap_memory: *mut std::os::raw::c_void = zero!();
   match message {
     WM_SIZE => {
-      let mut bitmap_info: BITMAPINFO = zero!();
       let mut client_rect: RECT = zero!();
-      let mut bitmap_handle: isize = 0;
-      let mut bitmap_memory: *mut std::os::raw::c_void = zero!();
       unsafe { GetClientRect(window, &mut client_rect) };
       let width: i32 = client_rect.right - client_rect.left;
       let height: i32 = client_rect.bottom - client_rect.top;
@@ -103,13 +123,23 @@ fn win32_window_proc(
 
     WM_PAINT => {
       let mut paint:PAINTSTRUCT = zero!();
-      let paint_device_context = unsafe { BeginPaint(window, &mut paint) };
+      let device_context = unsafe { BeginPaint(window, &mut paint) };
       let x = paint.rcPaint.left;
       let y = paint.rcPaint.top;
       let height = paint.rcPaint.bottom - paint.rcPaint.top;
       let width = paint.rcPaint.right - paint.rcPaint.left;
-      let operation: u32 = WHITENESS;
-      unsafe { PatBlt(paint_device_context, x, y, width, height, operation); }
+      let mut client_rect: RECT = zero!();
+      unsafe { GetClientRect(window, &mut client_rect) };
+      win32_update_window(
+        &mut bitmap_memory, 
+        &mut bitmap_info, 
+        device_context, 
+        &client_rect, 
+        x, 
+        y, 
+        width, 
+        height
+      );
       unsafe { EndPaint(window, &paint) };
 
     },
