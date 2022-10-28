@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::System::Diagnostics::Debug::*;
 use windows_sys::Win32::System::LibraryLoader::*;
@@ -13,20 +15,34 @@ macro_rules! zero {
 }
 
 static mut BITMAP_MEMORY: *mut std::os::raw::c_void = core::ptr::null_mut();
+static mut BITMAP_INFO: *mut BITMAPINFO = core::ptr::null_mut();
 
 //{{{ WIN32_RESIZE_DIB_SECTION
 fn win32_resize_dib_section(
   bitmap_memory: &mut *mut std::os::raw::c_void,
-  bitmap_info: &mut BITMAPINFO, 
+  bitmap_info: &mut *mut BITMAPINFO, 
   bitmap_width: i32, bitmap_height: i32
 ) -> () {
-
-  bitmap_info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
-  bitmap_info.bmiHeader.biWidth = bitmap_width;
-  bitmap_info.bmiHeader.biHeight = -bitmap_height;
-  bitmap_info.bmiHeader.biPlanes = 1;
-  bitmap_info.bmiHeader.biBitCount = 32;
-  bitmap_info.bmiHeader.biCompression = BI_RGB;
+  if bitmap_info.is_null() {
+    unsafe { 
+      *bitmap_info = VirtualAlloc(
+        std::ptr::null(), 
+        core::mem::size_of::<BITMAPINFO>(), 
+        MEM_COMMIT, 
+        PAGE_READWRITE
+      ) as *mut BITMAPINFO
+    };
+  }
+  println!("{}",unsafe { (**bitmap_info).bmiHeader.biSize });
+  unsafe {
+    (**bitmap_info).bmiHeader.biSize = std::mem::size_of::<BITMAPINFO>() as u32;
+    (**bitmap_info).bmiHeader.biWidth = bitmap_width;
+    (**bitmap_info).bmiHeader.biHeight = -bitmap_height;
+    (**bitmap_info).bmiHeader.biPlanes = 1;
+    (**bitmap_info).bmiHeader.biBitCount = 32;
+    (**bitmap_info).bmiHeader.biCompression = BI_RGB;
+  }
+  dbg!(bitmap_info);
   const BYTES_PER_PIXEL: i32 = 4;
   let bitmap_memory_size: usize = ((bitmap_width * bitmap_height) * BYTES_PER_PIXEL) as usize;
   if !bitmap_memory.is_null() {
@@ -40,16 +56,19 @@ fn win32_resize_dib_section(
         PAGE_READWRITE
       )
     };
-
   }
+
+  
+
+
   dbg!(bitmap_memory);
 }
 //}}}
 
 // {{{WIN32_UPDATE_WINDOW
 fn win32_update_window(
-  bitmap_memory: *mut std::os::raw::c_void,
-  bitmap_info: &mut BITMAPINFO,
+  bitmap_memory: &mut *mut std::os::raw::c_void,
+  bitmap_info: &mut *mut BITMAPINFO,
   device_context: isize, 
   window_rect: &RECT,
   width: i32, 
@@ -63,8 +82,8 @@ fn win32_update_window(
     device_context, 
     0, 0, bitmap_width, bitmap_height,
     0, 0, window_width, window_height,
-    bitmap_memory, 
-    bitmap_info, 
+    *bitmap_memory, 
+    *bitmap_info, 
     DIB_RGB_COLORS, 
     SRCCOPY);
   }
@@ -79,15 +98,15 @@ fn win32_window_proc(
   wparam: usize,
   lparam: isize,
 ) -> isize {
+  //TODO : For now
   let mut result = 0;
-  let mut bitmap_info: BITMAPINFO = zero!();
   match message {
     WM_SIZE => {
       let mut client_rect: RECT = zero!();
       unsafe { GetClientRect(window, &mut client_rect) };
       let width: i32 = client_rect.right - client_rect.left;
       let height: i32 = client_rect.bottom - client_rect.top;
-      unsafe { win32_resize_dib_section(&mut BITMAP_MEMORY, &mut bitmap_info, width, height) }
+      unsafe { win32_resize_dib_section(&mut BITMAP_MEMORY, &mut BITMAP_INFO, width, height) }
       unsafe { OutputDebugStringA(s!("WM_SIZE")) };
     },
 
@@ -115,8 +134,8 @@ fn win32_window_proc(
       unsafe { GetClientRect(window, &mut client_rect) };
       unsafe { dbg!(BITMAP_MEMORY); }
       win32_update_window(
-        unsafe { BITMAP_MEMORY }, 
-        &mut bitmap_info, 
+        unsafe { &mut BITMAP_MEMORY }, 
+        unsafe { &mut BITMAP_INFO},
         device_context, 
         &client_rect, 
         width, 
