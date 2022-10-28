@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::System::Diagnostics::Debug::*;
 use windows_sys::Win32::System::LibraryLoader::*;
@@ -43,25 +41,36 @@ fn win32_resize_dib_section(
     (**bitmap_info).bmiHeader.biCompression = BI_RGB;
   }
   dbg!(bitmap_info);
-  const BYTES_PER_PIXEL: i32 = 4;
-  let bitmap_memory_size: usize = ((bitmap_width * bitmap_height) * BYTES_PER_PIXEL) as usize;
+  const BYTES_PER_PIXEL: usize = 4;
+  let bitmap_memory_size: usize = (bitmap_width * bitmap_height) as usize * BYTES_PER_PIXEL;
   if !bitmap_memory.is_null() {
     unsafe { VirtualFree(*bitmap_memory, 0, MEM_RELEASE) };
-  } else {
+  }
     unsafe { 
       *bitmap_memory = VirtualAlloc(
         std::ptr::null(), 
         bitmap_memory_size, 
         MEM_COMMIT, 
         PAGE_READWRITE
-      )
-    };
-  }
-
+      );
+    }
   
-
-
-  dbg!(bitmap_memory);
+  
+  
+  let pitch = (bitmap_width*BYTES_PER_PIXEL as i32) as isize;
+  let mut row = *bitmap_memory as *mut u8;
+  dbg!(&row);
+  for _y in 0..bitmap_height {
+    let mut pixel = row as *mut u32;
+    for _x in 0..bitmap_width {
+      unsafe {*pixel = 0;}
+      unsafe {*pixel = 0;}
+      unsafe {*pixel = 0;}
+      unsafe {*pixel = 0;}
+    }
+    row = unsafe {row.offset(pitch)};
+  }
+  dbg!(&bitmap_memory);
 }
 //}}}
 
