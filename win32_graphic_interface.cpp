@@ -72,6 +72,7 @@ Win32ResizeDIBSection(int Width, int Height)
   
 }
 
+// {{{Win32UpdateWindow
 internal void
 Win32UpdateWindow(HDC DeviceContext, RECT WindowRect,int X, int Y, int Width, int Height) 
 {
@@ -87,6 +88,7 @@ Win32UpdateWindow(HDC DeviceContext, RECT WindowRect,int X, int Y, int Width, in
                 DIB_RGB_COLORS, 
                 SRCCOPY);
 }
+//}}}
 
 //{{{Win32MainWindowCallback
 LRESULT CALLBACK 
@@ -153,7 +155,7 @@ WinMain(HINSTANCE Instance,
         int nShowCmd) 
 {
   WNDCLASSA WindowClass = {};
-  WindowClass.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
+  WindowClass.style = CS_HREDRAW|CS_VREDRAW;
   WindowClass.lpfnWndProc = Win32MainWindowCallback;
   WindowClass.hInstance = Instance;
   WindowClass.lpszClassName = "GraphicInterfaceWindowClass";
