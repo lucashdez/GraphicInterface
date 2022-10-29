@@ -40,7 +40,7 @@ command_list =
     .cursor_at_end = false,
     .cmd =
     {
-      { "build.bat", .os = "win" },
+      { "cl -Zi win32_graphic_interface.cpp user32.lib gdi32.lib", .os = "win" },
       { "echo Linux build command not implemented for 4coder project.", .os = "linux" },
     },
   },
@@ -53,7 +53,7 @@ command_list =
     .cursor_at_end = false,
     .cmd =
     {
-      { "run.bat", .os = "win" },
+      { "win32_graphic_interface.exe", .os = "win" },
       { "echo Linux run command not implemented for 4coder project.", .os = "linux" },
     },
   },

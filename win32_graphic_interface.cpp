@@ -67,7 +67,6 @@ Win32ResizeDIBSection(int Width, int Height)
   int BytesPerPixel = 4;
   int BitmapMemorySize = (Width*Height)*BytesPerPixel;
   BitmapMemory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-  
   RenderWeirdGradient(128,0);
   
 }
