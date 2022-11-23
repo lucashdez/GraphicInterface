@@ -15,7 +15,6 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-// TODO: correctErrors
 struct win32_offscreen_buffer
 {
     BITMAPINFO Info;
@@ -35,6 +34,7 @@ struct win32_window_dimension
 global_variable bool Running;
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 
+//{{{ Win32GetWindowDimension
 win32_window_dimension
 Win32GetWindowDimension(HWND Window)
 {
@@ -47,7 +47,9 @@ Win32GetWindowDimension(HWND Window)
 
     return (Result);
 }
+//}}}
 
+// {{{ RenderWeirdGradient
 internal void
 RenderWeirdGradient(win32_offscreen_buffer Buffer, int XOffset, int YOffset)
 {
@@ -65,7 +67,9 @@ RenderWeirdGradient(win32_offscreen_buffer Buffer, int XOffset, int YOffset)
         Row += Buffer.Pitch;
     }
 }
+// }}}
 
+// {{{ Win32ResizeDIBSection
 internal void
 Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
 {
@@ -90,18 +94,20 @@ Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
     Buffer->Memory =
         VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 }
+// }}}
 
 // {{{ Win32DisplayBufferInWindow
 internal void
 Win32DisplayBufferInWindow(HDC DeviceContext, int WindowWidth, int WindowHeight,
-                           win32_offscreen_buffer *Buffer, int X, int Y,
+                           win32_offscreen_buffer Buffer, int X, int Y,
                            int Width, int Height)
 {
+    // TODO : Correct aspect ratio
     StretchDIBits(DeviceContext,
                   /*X, Y, Width, Height,
                   X, Y, Width, Height, */
-                  0, 0, Buffer->Width, Buffer->Height, 0, 0, WindowWidth,
-                  WindowHeight, Buffer->Memory, &Buffer->Info, DIB_RGB_COLORS,
+                  0, 0, WindowWidth, WindowHeight, 0, 0, Buffer.Width,
+                  Buffer.Height, Buffer.Memory, &Buffer.Info, DIB_RGB_COLORS,
                   SRCCOPY);
 }
 //}}}
@@ -116,8 +122,8 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
     case WM_SIZE:
     {
         win32_window_dimension Dimension = Win32GetWindowDimension(Window);
-        Win32ResizeDIBSection(&GlobalBackBuffer, Dimension.Width,
-                              Dimension.Height);
+        // NOTE : Assigned 720p
+        Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
     }
     break;
 
@@ -148,7 +154,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
         int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
         win32_window_dimension Dimension = Win32GetWindowDimension(Window);
         Win32DisplayBufferInWindow(DeviceContext, Dimension.Width,
-                                   Dimension.Height, &GlobalBackBuffer, X, Y,
+                                   Dimension.Height, GlobalBackBuffer, X, Y,
                                    Width, Height);
         EndPaint(Window, &Paint);
     }
@@ -205,7 +211,7 @@ WinMain(HINSTANCE Instance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
                     Win32GetWindowDimension(Window);
                 Win32DisplayBufferInWindow(
                     DeviceContext, Dimension.Width, Dimension.Height,
-                    &GlobalBackBuffer, 0, 0, Dimension.Width, Dimension.Height);
+                    GlobalBackBuffer, 0, 0, Dimension.Width, Dimension.Height);
                 ReleaseDC(Window, DeviceContext);
             }
         }
